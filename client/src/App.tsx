@@ -37,6 +37,7 @@ import {
   createComparator,
   createLink,
   deckCode,
+  format,
   normalize,
   parseWithSections,
   resolveLink,
@@ -302,6 +303,22 @@ export function App() {
       return;
     }
     setComparison(built.active);
+    // Restore the input fields to match the shared comparison, so the page
+    // fully reflects the shared state on refresh (inputs and result stay in
+    // sync). The payload stores structured decks, which we render back into the
+    // canonical text-list form.
+    setRequest({
+      first: {
+        method: "text",
+        raw: format(resolved.value.first),
+        userName: resolved.value.firstName,
+      },
+      second: {
+        method: "text",
+        raw: format(resolved.value.second),
+        userName: resolved.value.secondName,
+      },
+    });
     setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

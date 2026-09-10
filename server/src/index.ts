@@ -227,19 +227,14 @@ async function handleImport(
 }
 
 /**
- * Build and configure the Fastify application. Exported so tests (task 10.3)
- * can drive it with `app.inject(...)` without binding a socket.
+ * Build and configure the Fastify application. Exported so tests can drive it
+ * with `app.inject(...)` without binding a socket.
  */
 export function buildServer() {
   const app = Fastify({ logger: true });
 
-  // Serve the built client bundle. The `/api/*` routes are registered after
-  // and take precedence over the static wildcard for their exact paths.
-  app.register(fastifyStatic, {
-    root: resolveClientDist(),
-    prefix: "/",
-  });
-
+  // The /api/* routes are registered before the static wildcard so they take
+  // precedence over it for their exact paths.
   app.get<{ Querystring: ImportQuery }>(
     "/api/import",
     async (request, reply) => handleImport(request.query.url, reply),
@@ -248,6 +243,12 @@ export function buildServer() {
   app.post<{ Body: ImportBody }>("/api/import", async (request, reply) =>
     handleImport(request.body?.url, reply),
   );
+
+  // Serve the built client bundle.
+  app.register(fastifyStatic, {
+    root: resolveClientDist(),
+    prefix: "/",
+  });
 
   return app;
 }
