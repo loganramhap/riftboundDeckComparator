@@ -420,7 +420,10 @@ export function App() {
 
   return (
     <main className="app">
-      <h1 className="app__title">Riftbound Deck Comparator</h1>
+      <header className="app__header">
+        <h1 className="app__title">Zaunite Workshop</h1>
+        <p className="app__subtitle">Deck Comparator</p>
+      </header>
 
       <DeckInputForm
         value={request}
