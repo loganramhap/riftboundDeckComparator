@@ -6,9 +6,10 @@
     "outDir": "./dist",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    "resolveJsonModule": true,
     "types": ["node"]
   },
   "references": [{ "path": "../shared" }],
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.json"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "dist"]
 }

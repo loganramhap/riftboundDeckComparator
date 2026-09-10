@@ -1,11 +1,12 @@
 /**
- * Comparison view renderer (task 12.2).
+ * Comparison view renderer.
  *
- * Renders a comparison result graphically: every Card Difference with its
- * Normalized Card Identity and both per-deck quantities attributed to the
- * correct deck by name, a distinguishing indicator separating differences from
- * shared cards, both deck names, and a no-differences indication when the
- * comparison has zero differences.
+ * Renders the comparison as a two-column diff: each card is shown once with its
+ * quantity in the left (first) deck and the right (second) deck side by side,
+ * grouped by deck section, with shared cards visually distinct from cards that
+ * differ. Cards are labeled by their resolved name (falling back to the card
+ * code when no name is known). Both deck names head their columns, and a
+ * no-differences state is shown when the two decks match exactly.
  *
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
  */
@@ -16,38 +17,52 @@ import {
   type ComparisonResult,
   type Section,
 } from "@riftbound/shared";
+import { resolveCardName, hasCardName } from "../cardNames.js";
 
-/**
- * Props for {@link ComparisonView}. Either pass the flattened fields, or a
- * single `view` object of the shared `ComparisonView` shape.
- */
 export interface ComparisonViewProps {
-  /** The first deck's resolved display name. */
+  /** The first (left) deck's resolved display name. */
   firstName: string;
-  /** The second deck's resolved display name. */
+  /** The second (right) deck's resolved display name. */
   secondName: string;
   /** The computed comparison result. */
   result: ComparisonResult;
 }
 
+/** Whether an entry's two quantities differ. */
+function isDifference(entry: CardEntry): boolean {
+  return entry.firstQuantity !== entry.secondQuantity;
+}
+
+/** The section an entry belongs to, defaulting when unspecified. */
+function sectionOf(entry: CardEntry): Section {
+  return entry.section ?? DEFAULT_SECTION;
+}
+
+/** Resolve the display label and optional secondary code for a card. */
+function cardLabel(identity: string): { name: string; code?: string } {
+  const name = resolveCardName(identity);
+  // Show the raw code as a secondary label only when we actually resolved a
+  // name (so a code that has no name doesn't show itself twice).
+  return hasCardName(identity) ? { name, code: identity } : { name };
+}
+
 /**
- * A single row for one card entry. `kind` drives the distinguishing indicator
- * that separates differences from shared cards (Requirement 7.2). Each quantity
- * cell is attributed to the deck it belongs to via its label and a
- * `data-deck` attribute (Requirements 7.4, 7.5).
+ * A single card row: the card label plus its left/right quantities. The row is
+ * marked shared vs. different, and each side is highlighted as higher/lower/
+ * absent so the diff reads at a glance.
  */
-function CardRow({
-  entry,
-  kind,
-  firstName,
-  secondName,
-}: {
-  entry: CardEntry;
-  kind: "difference" | "shared";
-  firstName: string;
-  secondName: string;
-}) {
-  const marker = kind === "difference" ? "≠" : "=";
+function CardRow({ entry }: { entry: CardEntry }) {
+  const diff = isDifference(entry);
+  const kind = diff ? "difference" : "shared";
+  const { name, code } = cardLabel(entry.identity);
+
+  const sideClass = (mine: number, other: number): string => {
+    if (mine === 0) return "qty qty--absent";
+    if (diff && mine > other) return "qty qty--more";
+    if (diff && mine < other) return "qty qty--less";
+    return "qty";
+  };
+
   return (
     <tr
       className={`card-row card-row--${kind}`}
@@ -56,23 +71,24 @@ function CardRow({
       data-identity={entry.identity}
     >
       <td className="card-row__marker" data-testid="row-indicator" aria-label={kind}>
-        {marker}
+        {diff ? "≠" : "="}
       </td>
-      <td className="card-row__identity" data-testid="row-identity">
-        {entry.identity}
+      <td className="card-row__card">
+        <span className="card-row__name" data-testid="row-identity">
+          {name}
+        </span>
+        {code && <span className="card-row__code">{code}</span>}
       </td>
       <td
-        className="card-row__qty card-row__qty--first"
+        className={`card-row__qty card-row__qty--first ${sideClass(entry.firstQuantity, entry.secondQuantity)}`}
         data-deck="first"
-        data-deck-name={firstName}
         data-testid="row-first-quantity"
       >
         {entry.firstQuantity}
       </td>
       <td
-        className="card-row__qty card-row__qty--second"
+        className={`card-row__qty card-row__qty--second ${sideClass(entry.secondQuantity, entry.firstQuantity)}`}
         data-deck="second"
-        data-deck-name={secondName}
         data-testid="row-second-quantity"
       >
         {entry.secondQuantity}
@@ -82,26 +98,36 @@ function CardRow({
 }
 
 /**
- * The graphical comparison view.
- */
-/** The section an entry belongs to, defaulting when unspecified. */
-function sectionOf(entry: CardEntry): Section {
-  return entry.section ?? DEFAULT_SECTION;
-}
-
-/**
- * Group the comparison entries by canonical section. Within each section,
- * differences are listed before shared cards. Only sections that contain at
- * least one entry are returned, in canonical display order.
+ * Group entries by canonical section. Within each section, differing cards are
+ * listed before shared cards, each sorted by display name. Only sections with
+ * at least one entry are returned, in canonical display order.
  */
 function groupBySection(
   result: ComparisonResult,
-): Array<{ section: Section; differences: CardEntry[]; shared: CardEntry[] }> {
-  return SECTION_ORDER.map((section) => ({
-    section,
-    differences: result.differences.filter((e) => sectionOf(e) === section),
-    shared: result.shared.filter((e) => sectionOf(e) === section),
-  })).filter((group) => group.differences.length + group.shared.length > 0);
+): Array<{ section: Section; rows: CardEntry[] }> {
+  const all = [...result.differences, ...result.shared];
+  const byName = (a: CardEntry, b: CardEntry) =>
+    resolveCardName(a.identity).localeCompare(resolveCardName(b.identity));
+
+  return SECTION_ORDER.map((section) => {
+    const inSection = all.filter((e) => sectionOf(e) === section);
+    const rows = [
+      ...inSection.filter(isDifference).sort(byName),
+      ...inSection.filter((e) => !isDifference(e)).sort(byName),
+    ];
+    return { section, rows };
+  }).filter((group) => group.rows.length > 0);
+}
+
+/** Count how many cards differ, for the summary line. */
+function summarize(result: ComparisonResult): {
+  differing: number;
+  shared: number;
+} {
+  return {
+    differing: result.differences.length,
+    shared: result.shared.length,
+  };
 }
 
 export function ComparisonView({
@@ -111,16 +137,22 @@ export function ComparisonView({
 }: ComparisonViewProps) {
   const hasDifferences = result.differences.length > 0;
   const groups = groupBySection(result);
+  const { differing, shared } = summarize(result);
 
   return (
     <section className="comparison-view" data-testid="comparison-view">
+      <div className="comparison-summary">
+        <span className="comparison-summary__diff" data-testid="summary">
+          {differing} card{differing === 1 ? "" : "s"} differ
+        </span>
+        <span className="comparison-summary__shared">{shared} shared</span>
+      </div>
+
       <table className="comparison-table">
         <thead>
           <tr>
             <th scope="col" aria-label="indicator" />
             <th scope="col">Card</th>
-            {/* Both deck names as column headers, associated with their
-                per-deck quantity columns (Requirement 7.5). */}
             <th scope="col" data-deck="first" data-testid="first-deck-name">
               {firstName}
             </th>
@@ -130,9 +162,11 @@ export function ComparisonView({
           </tr>
         </thead>
         {groups.map((group) => (
-          <tbody key={group.section} data-testid="section-group" data-section={group.section}>
-            {/* Section heading spanning the table (Legend, Chosen Champion,
-                Battlefields, Main Deck, Runes, Sideboard). */}
+          <tbody
+            key={group.section}
+            data-testid="section-group"
+            data-section={group.section}
+          >
             <tr className="section-heading-row">
               <th
                 scope="colgroup"
@@ -143,32 +177,13 @@ export function ComparisonView({
                 {group.section}
               </th>
             </tr>
-            {/* Differences first (distinguishing indicator), then shared cards
-                (Requirements 7.1–7.4, 7.2). */}
-            {group.differences.map((entry) => (
-              <CardRow
-                key={`diff-${entry.identity}`}
-                entry={entry}
-                kind="difference"
-                firstName={firstName}
-                secondName={secondName}
-              />
-            ))}
-            {group.shared.map((entry) => (
-              <CardRow
-                key={`shared-${entry.identity}`}
-                entry={entry}
-                kind="shared"
-                firstName={firstName}
-                secondName={secondName}
-              />
+            {group.rows.map((entry) => (
+              <CardRow key={entry.identity} entry={entry} />
             ))}
           </tbody>
         ))}
       </table>
 
-      {/* No-differences indication when there are zero Card Differences
-          (Requirement 7.6). */}
       {!hasDifferences && (
         <p className="comparison-view__no-differences" data-testid="no-differences">
           The two decks have no card differences.

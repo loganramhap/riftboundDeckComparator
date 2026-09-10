@@ -328,6 +328,25 @@ body {
   box-shadow: var(--shadow);
 }
 
+.comparison-summary {
+  display: flex;
+  gap: 1.25rem;
+  align-items: baseline;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-input);
+}
+
+.comparison-summary__diff {
+  font-weight: 700;
+  color: var(--diff);
+}
+
+.comparison-summary__shared {
+  color: var(--shared);
+  font-weight: 600;
+}
+
 .comparison-table {
   width: 100%;
   border-collapse: collapse;
@@ -353,7 +372,7 @@ body {
 }
 
 .comparison-table thead th[data-deck] {
-  text-align: right;
+  text-align: center;
   width: 8rem;
   color: var(--text);
 }
@@ -390,15 +409,48 @@ body {
   font-size: 1.05rem;
 }
 
-.card-row__identity {
+/* Card label: name on top, faint code beneath. */
+.card-row__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.card-row__name {
+  font-size: 0.95rem;
+}
+
+.card-row__code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.9rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
 }
 
 .card-row__qty {
-  text-align: right;
+  text-align: center;
+  width: 8rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* Per-side diff highlighting */
+.card-row__qty.qty--more {
+  color: var(--shared);
+}
+
+.card-row__qty.qty--less {
+  color: var(--diff);
+}
+
+.card-row__qty.qty--absent {
+  color: #55606b;
+}
+
+/* A subtle divider between the two quantity columns. */
+.card-row__qty--first,
+.comparison-table thead th[data-deck="first"] {
+  border-left: 1px solid var(--border);
 }
 
 /* Difference vs shared distinction */
@@ -414,8 +466,8 @@ body {
   color: var(--shared);
 }
 
-.card-row--shared td {
-  color: var(--text-muted);
+.card-row--shared .card-row__code {
+  color: #55606b;
 }
 
 .comparison-view__no-differences {
