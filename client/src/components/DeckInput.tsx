@@ -41,7 +41,8 @@ const RAW_FIELD_PRESENTATION: Record<
 > = {
   text: {
     label: "Deck list",
-    placeholder: "e.g.\n3 OGN-001\n2 OGN-007a",
+    placeholder:
+      "Card names or codes, e.g.\n\nMainDeck:\n3 Traveling Merchant\n2 Fizz, Trickster\n\nor\n\n3 OGN-001\n2 OGN-007a",
     multiline: true,
   },
   code: {

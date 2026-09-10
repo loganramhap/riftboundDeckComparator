@@ -161,8 +161,10 @@ describe("Comparator input routing and errors", () => {
     // normalization fails; the Comparator maps this to a missing-deck error.
     const malformedImporter: LinkImporter = {
       async import(): Promise<Result<ImportedDeck>> {
-        // Lowercase set id does not match the card code grammar.
-        return ok({ deck: new Map([["ogn-007a", 3]]), sourceName: "Bad Source" });
+        // Code-shaped (SET- prefix, no spaces) but malformed — the number is
+        // missing — so normalization rejects it. (A plain name would instead
+        // pass through as its own identity.)
+        return ok({ deck: new Map([["OGN-", 3]]), sourceName: "Bad Source" });
       },
     };
 

@@ -9,7 +9,13 @@
  *
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
  */
-import type { CardEntry, ComparisonResult } from "@riftbound/shared";
+import {
+  SECTION_ORDER,
+  DEFAULT_SECTION,
+  type CardEntry,
+  type ComparisonResult,
+  type Section,
+} from "@riftbound/shared";
 
 /**
  * Props for {@link ComparisonView}. Either pass the flattened fields, or a
@@ -78,13 +84,33 @@ function CardRow({
 /**
  * The graphical comparison view.
  */
+/** The section an entry belongs to, defaulting when unspecified. */
+function sectionOf(entry: CardEntry): Section {
+  return entry.section ?? DEFAULT_SECTION;
+}
+
+/**
+ * Group the comparison entries by canonical section. Within each section,
+ * differences are listed before shared cards. Only sections that contain at
+ * least one entry are returned, in canonical display order.
+ */
+function groupBySection(
+  result: ComparisonResult,
+): Array<{ section: Section; differences: CardEntry[]; shared: CardEntry[] }> {
+  return SECTION_ORDER.map((section) => ({
+    section,
+    differences: result.differences.filter((e) => sectionOf(e) === section),
+    shared: result.shared.filter((e) => sectionOf(e) === section),
+  })).filter((group) => group.differences.length + group.shared.length > 0);
+}
+
 export function ComparisonView({
   firstName,
   secondName,
   result,
 }: ComparisonViewProps) {
-  const { differences, shared } = result;
-  const hasDifferences = differences.length > 0;
+  const hasDifferences = result.differences.length > 0;
+  const groups = groupBySection(result);
 
   return (
     <section className="comparison-view" data-testid="comparison-view">
@@ -103,30 +129,42 @@ export function ComparisonView({
             </th>
           </tr>
         </thead>
-        <tbody>
-          {/* Every Card Difference is rendered with a distinguishing indicator
-              (Requirements 7.1, 7.2, 7.3, 7.4). */}
-          {differences.map((entry) => (
-            <CardRow
-              key={`diff-${entry.identity}`}
-              entry={entry}
-              kind="difference"
-              firstName={firstName}
-              secondName={secondName}
-            />
-          ))}
-          {/* Shared cards are rendered too, so the difference-vs-shared
-              indicator distinction is meaningful (Requirement 7.2). */}
-          {shared.map((entry) => (
-            <CardRow
-              key={`shared-${entry.identity}`}
-              entry={entry}
-              kind="shared"
-              firstName={firstName}
-              secondName={secondName}
-            />
-          ))}
-        </tbody>
+        {groups.map((group) => (
+          <tbody key={group.section} data-testid="section-group" data-section={group.section}>
+            {/* Section heading spanning the table (Legend, Chosen Champion,
+                Battlefields, Main Deck, Runes, Sideboard). */}
+            <tr className="section-heading-row">
+              <th
+                scope="colgroup"
+                colSpan={4}
+                className="section-heading"
+                data-testid="section-heading"
+              >
+                {group.section}
+              </th>
+            </tr>
+            {/* Differences first (distinguishing indicator), then shared cards
+                (Requirements 7.1–7.4, 7.2). */}
+            {group.differences.map((entry) => (
+              <CardRow
+                key={`diff-${entry.identity}`}
+                entry={entry}
+                kind="difference"
+                firstName={firstName}
+                secondName={secondName}
+              />
+            ))}
+            {group.shared.map((entry) => (
+              <CardRow
+                key={`shared-${entry.identity}`}
+                entry={entry}
+                kind="shared"
+                firstName={firstName}
+                secondName={secondName}
+              />
+            ))}
+          </tbody>
+        ))}
       </table>
 
       {/* No-differences indication when there are zero Card Differences

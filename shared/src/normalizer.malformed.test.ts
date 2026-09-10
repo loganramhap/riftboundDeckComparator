@@ -13,8 +13,9 @@ import type { StructuredDeck } from "./types.js";
 
 describe("Deck_Normalizer normalize malformed code rejection (Req 5.5)", () => {
   it("rejects a deck with one malformed code, naming the offending code", () => {
-    // Lowercase set id does not match [A-Z]{3}, so this code is malformed.
-    const malformed = "ogn-007a";
+    // Code-shaped (SET- prefix, no spaces) but malformed: the number is
+    // missing, so it does not match the grammar and is rejected.
+    const malformed = "OGN-";
     const deck: StructuredDeck = new Map([
       ["OGN-007a", 3],
       ["VEN-SP1", 2],
@@ -33,6 +34,26 @@ describe("Deck_Normalizer normalize malformed code rejection (Req 5.5)", () => {
     expect(result.error.code).toBe("MALFORMED_CARD_CODE");
     // The offending code is named in the message.
     expect(result.error.message).toContain(malformed);
+  });
+
+  it("passes free-text card names through as their own identity", () => {
+    // Name-based lists (no card codes) must normalize successfully; a name has
+    // no printing variant to strip and is not a malformed code.
+    const deck: StructuredDeck = new Map([
+      ["Traveling Merchant", 3],
+      ["Kennen, Heart of the Tempest", 1],
+      ["Chaos Rune", 9],
+    ]);
+
+    const result = normalize(deck);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(`expected normalize to succeed: ${result.error.message}`);
+    }
+    expect(result.value.get("Traveling Merchant")).toBe(3);
+    expect(result.value.get("Kennen, Heart of the Tempest")).toBe(1);
+    expect(result.value.get("Chaos Rune")).toBe(9);
   });
 
   it("rejects a deck whose malformed code has a two-character variant", () => {

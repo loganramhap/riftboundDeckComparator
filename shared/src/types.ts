@@ -36,6 +36,37 @@ export function err<E = DeckError>(error: E): Result<never, E> {
 export type InputMethod = "text" | "code" | "link";
 
 /**
+ * The canonical deck sections, in display order. Text lists may group cards
+ * under section headers; these are the normalized labels the app renders.
+ * Cards with no recognized section default to "Main Deck".
+ */
+export type Section =
+  | "Legend"
+  | "Chosen Champion"
+  | "Battlefields"
+  | "Main Deck"
+  | "Runes"
+  | "Sideboard";
+
+/**
+ * The canonical sections in their display order.
+ */
+export const SECTION_ORDER: readonly Section[] = [
+  "Legend",
+  "Chosen Champion",
+  "Battlefields",
+  "Main Deck",
+  "Runes",
+  "Sideboard",
+];
+
+/**
+ * The default section for cards that appear before any header or under an
+ * unrecognized header.
+ */
+export const DEFAULT_SECTION: Section = "Main Deck";
+
+/**
  * A structured, machine-readable error emitted by domain components.
  */
 export interface DeckError {
@@ -62,6 +93,14 @@ export interface DeckError {
  * - Text-sourced decks cap each card code at 99.
  */
 export type StructuredDeck = Map<string, number>;
+
+/**
+ * A mapping from a card key (card code or verbatim name, as it appears in a
+ * {@link StructuredDeck}) to the {@link Section} it was listed under. Produced
+ * by the text parser when a list uses section headers; other input paths omit
+ * it (all cards then fall to the default section).
+ */
+export type SectionMap = Map<string, Section>;
 
 /**
  * A deck reduced to printing-independent identities: a map from a normalized
@@ -95,6 +134,8 @@ export interface CardEntry {
   firstQuantity: number;
   /** Quantity in the second deck; 0 if absent. */
   secondQuantity: number;
+  /** The section this card belongs to, when section info is available. */
+  section?: Section;
 }
 
 /**

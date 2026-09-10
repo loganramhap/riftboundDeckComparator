@@ -5,11 +5,39 @@ A self-hosted web app for comparing two Riftbound decks side by side and seeing 
 ## Features
 
 - Compare two decks supplied by any mix of text list, deck code, or link
+- Text lists accept card codes or plain card names, and the diff is grouped by deck section (Legend, Chosen Champion, Battlefields, Main Deck, Runes, Sideboard)
 - Printing-independent normalization (variants like `OGN-007a` and `OGN-007` are treated as the same card)
 - Graphical diff showing every card difference with per-deck quantities, plus a clear "no differences" state
 - Name each deck, or inherit a name from a source link
 - Shareable links that encode the full comparison in the URL fragment (no server storage)
 - Stateless, single-process server designed to run in an LXC container on Proxmox
+
+## Text deck list format
+
+The **text list** input accepts one card per line, in any of these forms:
+
+```
+3 OGN-007a                     # <quantity> <card code>
+3x Traveling Merchant          # <quantity>x <card name>
+3 Traveling Merchant           # <quantity> <card name>
+1 Kennen, Heart of the Tempest # names may contain spaces and commas
+```
+
+Quantities are integers from 1 to 99. Lines referencing the same card are summed (capped at 99). Blank lines are ignored. **Section headers** — a label ending in `:` — set the section for the cards that follow, and the comparison is displayed grouped by section. Header variants map to canonical labels: `Legend`, `Chosen Champion` (from `Champion`), `Battlefields`, `Main Deck` (from `MainDeck`), `Runes` (from `Rune Pool`), and `Sideboard`. Cards before any header, or under an unrecognized header, fall into `Main Deck`. A full exported decklist pastes in cleanly:
+
+```
+Legend:
+1 Kennen, Heart of the Tempest
+MainDeck:
+3 Traveling Merchant
+2 Fizz, Trickster
+Rune Pool:
+9 Chaos Rune
+```
+
+A line that has no leading quantity (and isn't a section header) is rejected, and the parser reports the offending line number.
+
+**Matching note:** cards match across the two decks by exact identifier — normalized card code, or verbatim card name. Comparing two name-based lists works well, and comparing two code-based decks (or deck codes) works well. Comparing a *name* list against a *code* deck will not match cards, because the app has no card database to translate names to codes.
 
 ## Architecture
 
@@ -193,7 +221,7 @@ apt update && apt install -y cloudflared
 
 cloudflared tunnel login
 cloudflared tunnel create riftbound
-cloudflared tunnel route dns riftbound riftbound.yourdomain.com
+cloudflared tunnel route dns riftbound zauniteworkshop.com
 ```
 
 `/etc/cloudflared/config.yml`:
@@ -203,7 +231,7 @@ tunnel: riftbound
 credentials-file: /root/.cloudflared/<TUNNEL-ID>.json
 
 ingress:
-  - hostname: riftbound.yourdomain.com
+  - hostname: zauniteworkshop.com
     service: http://127.0.0.1:3000
   - service: http_status:404
 ```
@@ -230,6 +258,37 @@ systemctl restart riftbound
 
 - The `/api/import` proxy makes outbound HTTPS calls to third-party decklist sources, so the container needs internet egress (the default). Cloudflared also needs outbound 443; neither requires inbound ports.
 - If you create the tunnel from the Cloudflare Zero Trust dashboard instead of the CLI, you can skip `config.yml` and install with a token: `cloudflared service install <TOKEN>`.
+
+## Security / dependency notes
+
+### Node and npm versions
+
+This project targets **Node.js 20 LTS**, which ships with **npm 10** — this pairing is correct and expected. If `npm` prints a notice about a new major version (e.g. npm 12), you can ignore it: npm 12 requires Node 22/24/26 and will refuse to install on Node 20 with an `EBADENGINE` / `notsup` error. Don't chase the npm upgrade to silence the notice. If you genuinely want a newer npm, upgrade Node first (e.g. the NodeSource `setup_22.x` script), but it is not required here.
+
+### `npm audit` findings
+
+`npm install` may report vulnerabilities. Before acting on them:
+
+- **Do not run `npm audit fix --force`.** The `--force` flag installs breaking major-version changes across dependencies and can silently break the build or runtime.
+- **Check what actually ships in production.** Most findings are in build/test tooling (Vite, Vitest, test libraries) that never runs in the container. The deployed server runtime is only `fastify`, `@fastify/static`, `@piltoverarchive/riftbound-deck-codes`, and `fflate`.
+
+```bash
+npm audit              # full report, including dev/build tooling
+npm audit --omit=dev   # only the production runtime tree
+```
+
+If `npm audit --omit=dev` reports **0 vulnerabilities**, the deployed process is unaffected and the findings can be left alone. If there *are* runtime advisories, address them narrowly and re-verify:
+
+```bash
+npm audit fix                       # semver-compatible fixes only (no --force)
+# or bump a specific package deliberately:
+npm install <pkg>@<safe-version>
+
+npm run build
+npx vitest run shared/src server/src
+```
+
+Always confirm the build and tests still pass after any dependency change — that's the safety step `--force` skips.
 
 ## License
 

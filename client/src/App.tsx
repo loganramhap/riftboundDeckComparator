@@ -38,12 +38,17 @@ import {
   createLink,
   deckCode,
   normalize,
-  parse,
+  normalizedIdentityKey,
+  parseCardCode,
+  parseWithSections,
   resolveLink,
+  withSections,
   type CompareRequest,
   type ComparisonView as ComparisonViewModel,
   type DeckError,
   type DeckInput,
+  type Section,
+  type SectionMap,
   type SharePayload,
   type StructuredDeck,
 } from "@riftbound/shared";
@@ -80,29 +85,56 @@ interface ShareState {
  */
 async function deriveStructuredDeck(
   input: DeckInput,
-  position: "first" | "second",
-): Promise<StructuredDeck | null> {
+): Promise<{ deck: StructuredDeck; sections: SectionMap } | null> {
   switch (input.method) {
     case "text": {
-      const parsed = parse(input.raw);
+      // Text lists may carry section headers; capture them.
+      const parsed = parseWithSections(input.raw);
       return parsed.ok ? parsed.value : null;
     }
     case "code": {
       const decoded = deckCode.decode(input.raw);
-      return decoded.ok ? decoded.value : null;
+      return decoded.ok ? { deck: decoded.value, sections: new Map() } : null;
     }
     case "link": {
       const imported = await linkImporter.import(input.raw);
-      return imported.ok ? imported.value.deck : null;
+      return imported.ok
+        ? { deck: imported.value.deck, sections: new Map() }
+        : null;
     }
     default: {
       // Exhaustiveness guard.
       const _never: never = input.method;
       void _never;
-      void position;
       return null;
     }
   }
+}
+
+/**
+ * Build a lookup from normalized card identity to {@link Section}, merged from
+ * both decks' section maps. Each card key is normalized the same way the
+ * comparison engine keys cards (card code -> printing-independent identity;
+ * a free-text name -> itself). The first deck's section for an identity wins,
+ * then the second deck's; identities with no section fall to the default.
+ */
+function buildSectionLookup(
+  first: SectionMap,
+  second: SectionMap,
+): Map<string, Section> {
+  const lookup = new Map<string, Section>();
+  const add = (sections: SectionMap) => {
+    for (const [key, section] of sections) {
+      const parsed = parseCardCode(key);
+      const identity = parsed.ok ? normalizedIdentityKey(parsed.value) : key;
+      if (!lookup.has(identity)) {
+        lookup.set(identity, section);
+      }
+    }
+  };
+  add(first);
+  add(second);
+  return lookup;
 }
 
 /**
@@ -249,17 +281,29 @@ export function App() {
       return;
     }
 
-    // Re-derive the structured decks for sharing. This uses the same producers
-    // as the Comparator, so it succeeds for the same inputs that just compared.
-    const first = await deriveStructuredDeck(submitted.first, "first");
-    const second = await deriveStructuredDeck(submitted.second, "second");
+    // Re-derive the structured decks (and their sections) for sharing and for
+    // grouping the view. This uses the same producers as the Comparator, so it
+    // succeeds for the same inputs that just compared.
+    const first = await deriveStructuredDeck(submitted.first);
+    const second = await deriveStructuredDeck(submitted.second);
+
+    // Annotate the comparison result with each card's section, grouped later by
+    // the view. Sections come from the text lists; code/link decks contribute
+    // none and fall to the default section.
+    const sectionLookup = buildSectionLookup(
+      first?.sections ?? new Map(),
+      second?.sections ?? new Map(),
+    );
 
     setComparison({
-      view: outcome.value,
+      view: {
+        ...outcome.value,
+        result: withSections(outcome.value.result, sectionLookup),
+      },
       // Fall back to empty maps only if re-derivation somehow fails; Share is
       // gated on both being present, so an empty map simply disables sharing.
-      first: first ?? new Map(),
-      second: second ?? new Map(),
+      first: first?.deck ?? new Map(),
+      second: second?.deck ?? new Map(),
       firstName: outcome.value.firstName,
       secondName: outcome.value.secondName,
     });

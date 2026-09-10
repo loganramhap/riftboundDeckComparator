@@ -1,0 +1,428 @@
+/**
+ * Global styles for the Riftbound Deck Comparator client.
+ *
+ * A single stylesheet keyed off the semantic class names the components already
+ * emit (app, deck-input-form, deck-input, comparison-view, card-row, etc.).
+ * Dark theme, responsive, no CSS framework.
+ */
+
+:root {
+  --bg: #0f1216;
+  --bg-elevated: #171c22;
+  --bg-input: #1e252d;
+  --border: #2a323c;
+  --border-strong: #3a4552;
+  --text: #e6ebf0;
+  --text-muted: #9aa7b4;
+  --accent: #c8963e; /* Riftbound-ish gold */
+  --accent-hover: #ddab52;
+  --accent-contrast: #1a1204;
+  --diff: #e0603a;
+  --diff-bg: rgba(224, 96, 58, 0.12);
+  --shared: #3f9e6b;
+  --shared-bg: rgba(63, 158, 107, 0.1);
+  --danger: #e0603a;
+  --danger-bg: rgba(224, 96, 58, 0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ---------------------------------------------------------------- Layout -- */
+
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.app__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.app__title::before {
+  content: "⚔ ";
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------- Input form -- */
+
+.deck-input-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.deck-input-form__decks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 720px) {
+  .deck-input-form__decks {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deck-input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin: 0;
+  min-width: 0;
+  box-shadow: var(--shadow);
+}
+
+.deck-input legend {
+  font-weight: 600;
+  font-size: 1.05rem;
+  padding: 0 0.5rem;
+  color: var(--accent);
+}
+
+.deck-input__group-label {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+
+/* Segmented method selector */
+[role="radiogroup"] {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.deck-input__method {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.deck-input__method:hover {
+  border-color: var(--border-strong);
+}
+
+.deck-input__method:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(200, 150, 62, 0.14);
+  color: var(--accent-hover);
+}
+
+.deck-input__method input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.deck-input__raw,
+.deck-input__name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+}
+
+.deck-input__raw label,
+.deck-input__name label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+/* Inputs and textareas */
+.deck-input textarea,
+.deck-input input[type="text"],
+.app__share-result input[type="text"] {
+  width: 100%;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.deck-input textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  resize: vertical;
+  min-height: 9rem;
+}
+
+.deck-input textarea:focus,
+.deck-input input[type="text"]:focus,
+.app__share-result input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(200, 150, 62, 0.2);
+}
+
+.deck-input textarea::placeholder,
+.deck-input input::placeholder {
+  color: #5f6b78;
+}
+
+/* Compare button */
+.deck-input-form__compare {
+  align-self: flex-start;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.05s;
+}
+
+.deck-input-form__compare:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.deck-input-form__compare:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.deck-input-form__compare:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------- Errors -- */
+
+.app__error {
+  margin-top: 1.25rem;
+  padding: 0.85rem 1rem;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  color: #f3b3a2;
+}
+
+.app__error-message {
+  font-weight: 500;
+}
+
+.app__error-line {
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+/* ------------------------------------------------------------- Result -- */
+
+.app__result {
+  margin-top: 2rem;
+}
+
+.app__result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.app__share {
+  background: transparent;
+  color: var(--accent-hover);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.app__share:hover:not(:disabled) {
+  background: rgba(200, 150, 62, 0.14);
+}
+
+.app__share:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.app__share-result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.app__share-result label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.app__share-result input {
+  flex: 1;
+  min-width: 0;
+}
+
+.app__share-status {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------- Comparison view -- */
+
+.comparison-view {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.comparison-table thead th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Quantity columns and the indicator column are narrow and centered. */
+.comparison-table thead th:first-child {
+  width: 2.5rem;
+  text-align: center;
+}
+
+.comparison-table thead th[data-deck] {
+  text-align: right;
+  width: 8rem;
+  color: var(--text);
+}
+
+.section-heading {
+  text-align: left;
+  padding: 0.6rem 1rem;
+  background: #12171d;
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.comparison-table tbody:first-of-type .section-heading {
+  border-top: none;
+}
+
+.card-row td {
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-row:last-child td {
+  border-bottom: none;
+}
+
+.card-row__marker {
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.card-row__identity {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.card-row__qty {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Difference vs shared distinction */
+.card-row--difference {
+  background: var(--diff-bg);
+}
+
+.card-row--difference .card-row__marker {
+  color: var(--diff);
+}
+
+.card-row--shared .card-row__marker {
+  color: var(--shared);
+}
+
+.card-row--shared td {
+  color: var(--text-muted);
+}
+
+.comparison-view__no-differences {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--shared);
+  background: var(--shared-bg);
+  font-weight: 500;
+}

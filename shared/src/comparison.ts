@@ -5,7 +5,13 @@
  * the authoritative behavior. This is a pure, deterministic transformation.
  */
 
-import type { CardEntry, ComparisonResult, NormalizedDeck } from "./types.js";
+import {
+  DEFAULT_SECTION,
+  type CardEntry,
+  type ComparisonResult,
+  type NormalizedDeck,
+  type Section,
+} from "./types.js";
 
 /**
  * Compare two normalized decks.
@@ -50,4 +56,25 @@ export function compare(
   }
 
   return { shared, differences };
+}
+
+/**
+ * Annotate every {@link CardEntry} in a comparison result with the
+ * {@link Section} it belongs to, looked up by normalized identity. Identities
+ * absent from the lookup fall to the default section ("Main Deck").
+ *
+ * Pure: returns a new result; the input is not mutated.
+ */
+export function withSections(
+  result: ComparisonResult,
+  sectionByIdentity: Map<string, Section>,
+): ComparisonResult {
+  const annotate = (entry: CardEntry): CardEntry => ({
+    ...entry,
+    section: sectionByIdentity.get(entry.identity) ?? DEFAULT_SECTION,
+  });
+  return {
+    shared: result.shared.map(annotate),
+    differences: result.differences.map(annotate),
+  };
 }
