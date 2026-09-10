@@ -1,0 +1,74 @@
+/**
+ * Unit tests for Deck_Parser rejection reporting (Req 2.5).
+ *
+ * A single malformed line at a known position, placed among valid lines,
+ * must cause `parse` to reject the whole submission and report the failing
+ * line's 1-based number and content, without producing a structured deck.
+ */
+
+import { describe, it, expect } from "vitest";
+import { parse } from "./parser.js";
+
+describe("Deck_Parser parse rejection reporting (Req 2.5)", () => {
+  it("reports the line number and content of a malformed line among valid lines", () => {
+    // Valid lines at 1 and 2, malformed line at position 3, valid line at 4.
+    const malformed = "not a valid line";
+    const text = ["3 OGN-007a", "2 VEN-SP1", malformed, "1 RAD-R05"].join("\n");
+
+    const result = parse(text);
+
+    // No structured deck is produced.
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected parse to reject the submission");
+    }
+
+    expect(result.error.code).toBe("PARSE_LINE");
+    expect(result.error.lineNumber).toBe(3);
+    expect(result.error.lineContent).toBe(malformed);
+  });
+
+  it("reports the first malformed line when it appears at position 1", () => {
+    const malformed = "@@@ garbage";
+    const text = [malformed, "3 OGN-007a"].join("\n");
+
+    const result = parse(text);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected parse to reject the submission");
+    }
+    expect(result.error.lineNumber).toBe(1);
+    expect(result.error.lineContent).toBe(malformed);
+  });
+
+  it("reports a line whose quantity is out of the 1-99 range", () => {
+    // Quantity 0 is outside 1..99, so this line is malformed (Req 2.5).
+    const malformed = "0 OGN-007a";
+    const text = ["2 VEN-SP1", malformed].join("\n");
+
+    const result = parse(text);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected parse to reject the submission");
+    }
+    expect(result.error.lineNumber).toBe(2);
+    expect(result.error.lineContent).toBe(malformed);
+  });
+
+  it("reports a line whose card code does not match the required pattern", () => {
+    // Lowercase set id does not match [A-Z]{3}, so the code is malformed.
+    const malformed = "3 ogn-007a";
+    const text = ["1 RAD-R05", "3 OGN-007a", malformed].join("\n");
+
+    const result = parse(text);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error("expected parse to reject the submission");
+    }
+    expect(result.error.lineNumber).toBe(3);
+    expect(result.error.lineContent).toBe(malformed);
+  });
+});
