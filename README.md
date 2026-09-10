@@ -111,9 +111,14 @@ From the Proxmox host:
 
 ```bash
 pveam update
-pveam download local debian-12-standard_12.7-1_amd64.tar.zst
 
-pct create 120 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst \
+# Find the exact current template name (the version suffix changes over time)
+pveam available --section system | grep debian-12
+# Download the name from the list above, e.g.:
+TEMPLATE=debian-12-standard_12.12-1_amd64.tar.zst
+pveam download local "$TEMPLATE"
+
+pct create 120 "local:vztmpl/$TEMPLATE" \
   --hostname riftbound \
   --cores 1 --memory 512 --swap 512 \
   --rootfs local-lvm:4 \
@@ -123,6 +128,8 @@ pct create 120 local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst \
 pct start 120
 pct enter 120
 ```
+
+Set `TEMPLATE` to the exact filename shown by `pveam available`, since the point-release version changes over time.
 
 ### 2. Install Node and build (inside the container)
 
