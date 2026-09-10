@@ -15,9 +15,14 @@
  * readable names as their identity already and pass through unchanged.
  */
 
-import { normalizedIdentityKey, parseCardCode } from "@riftbound/shared";
+import {
+  normalizedIdentityKey,
+  parseCardCode,
+  type Section,
+} from "@riftbound/shared";
 import cardNames from "./card-names.json";
 import canonicalIdentity from "./canonical-identity.json";
+import cardSections from "./card-sections.json";
 
 const NAME_BY_IDENTITY: Record<string, string> = cardNames;
 
@@ -27,6 +32,28 @@ const NAME_BY_IDENTITY: Record<string, string> = cardNames;
  * so mechanically-identical cards compare as one.
  */
 const CANONICAL_BY_IDENTITY: Record<string, string> = canonicalIdentity;
+
+/**
+ * A fixed {@link Section} implied by a card's type (Legend, Battlefield, Rune),
+ * keyed by identity (and canonical identity). Cards whose type dictates a
+ * section belong there regardless of which deck-code zone or list header they
+ * appeared under; other cards (units, spells, gear) are not listed here.
+ */
+const SECTION_BY_IDENTITY: Record<string, Section> = cardSections as Record<
+  string,
+  Section
+>;
+
+/**
+ * The section a card's type forces it into (Legend / Battlefields / Runes), or
+ * `undefined` when the card's type implies no fixed section. Card codes are
+ * normalized and canonicalized before lookup.
+ */
+export function sectionForCard(identityOrKey: string): Section | undefined {
+  const identity = toIdentity(identityOrKey);
+  const canonical = CANONICAL_BY_IDENTITY[identity] ?? identity;
+  return SECTION_BY_IDENTITY[canonical] ?? SECTION_BY_IDENTITY[identity];
+}
 
 /** Normalize a card code to its identity; non-codes (names) pass through. */
 function toIdentity(identityOrKey: string): string {

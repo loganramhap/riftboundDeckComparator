@@ -7,7 +7,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { canonicalizeIdentity, resolveCardName } from "./cardNames.js";
+import {
+  canonicalizeIdentity,
+  resolveCardName,
+  sectionForCard,
+} from "./cardNames.js";
 
 describe("canonicalizeIdentity", () => {
   it("collapses an overnumbered reprint to the base identity", () => {
@@ -40,5 +44,28 @@ describe("resolveCardName", () => {
   it("resolves both printings of a reprint to the same name", () => {
     expect(resolveCardName("VEN-155")).toBe("Heart of the Tempest");
     expect(resolveCardName("VEN-197")).toBe("Heart of the Tempest");
+  });
+});
+
+describe("sectionForCard", () => {
+  it("places legends in the Legend section", () => {
+    // VEN-155 is "Heart of the Tempest", a Legend.
+    expect(sectionForCard("VEN-155")).toBe("Legend");
+    // ...including its overnumbered reprint via canonicalization.
+    expect(sectionForCard("VEN-197")).toBe("Legend");
+  });
+
+  it("places runes in the Runes section", () => {
+    expect(sectionForCard("OGN-166")).toBe("Runes"); // Chaos Rune
+    expect(sectionForCard("OGN-007")).toBe("Runes"); // Fury Rune
+  });
+
+  it("places battlefields in the Battlefields section", () => {
+    expect(sectionForCard("OGN-275")).toBe("Battlefields");
+  });
+
+  it("returns undefined for units/spells/gear (no forced section)", () => {
+    // OGN-001 "Blazing Scorcher" is a Unit.
+    expect(sectionForCard("OGN-001")).toBeUndefined();
   });
 });

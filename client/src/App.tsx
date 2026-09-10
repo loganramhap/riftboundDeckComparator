@@ -41,6 +41,7 @@ import {
   parseWithSections,
   resolveLink,
   withSections,
+  type CardEntry,
   type CompareRequest,
   type ComparisonResult,
   type ComparisonView as ComparisonViewModel,
@@ -52,7 +53,7 @@ import {
   type StructuredDeck,
 } from "@riftbound/shared";
 import { linkImporter } from "./importer.js";
-import { canonicalizeIdentity } from "./cardNames.js";
+import { canonicalizeIdentity, sectionForCard } from "./cardNames.js";
 import { ComparisonView } from "./components/ComparisonView.js";
 import { DeckInputForm, emptyCompareRequest } from "./components/DeckInputForm.js";
 
@@ -129,7 +130,12 @@ function buildSectionLookup(
   const add = (sections: SectionMap) => {
     for (const [key, section] of sections) {
       const identity = canonicalizeIdentity(key);
-      if (!lookup.has(identity)) {
+      // A card's type forces its section (Legend / Battlefields / Runes) over
+      // whatever zone or header it came from; otherwise use the source section.
+      const forced = sectionForCard(key);
+      if (forced) {
+        lookup.set(identity, forced);
+      } else if (!lookup.has(identity)) {
         lookup.set(identity, section);
       }
     }
@@ -168,7 +174,19 @@ function buildResult(
   // fall back to empty on the impossible error case rather than throwing.
   const a = firstNorm.ok ? firstNorm.value : new Map<string, number>();
   const b = secondNorm.ok ? secondNorm.value : new Map<string, number>();
-  return withSections(compareDecks(a, b), sectionLookup);
+  const result = withSections(compareDecks(a, b), sectionLookup);
+
+  // Type-forced sections (Legend / Battlefields / Runes) are authoritative for
+  // every entry, even when the source contributed no section (e.g. link/code
+  // decks). This overrides the source/default section per card by its type.
+  const applyForced = (entry: CardEntry): CardEntry => {
+    const forced = sectionForCard(entry.identity);
+    return forced ? { ...entry, section: forced } : entry;
+  };
+  return {
+    shared: result.shared.map(applyForced),
+    differences: result.differences.map(applyForced),
+  };
 }
 
 /**
