@@ -17,7 +17,15 @@ import {
   getDeckFromCode,
   type Deck,
 } from "@piltoverarchive/riftbound-deck-codes";
-import { err, ok, type DeckError, type Result, type StructuredDeck } from "./types.js";
+import {
+  err,
+  ok,
+  type DeckError,
+  type Result,
+  type Section,
+  type SectionMap,
+  type StructuredDeck,
+} from "./types.js";
 
 /**
  * Decode a Piltover Archive deck code into a {@link StructuredDeck}.
@@ -28,14 +36,58 @@ import { err, ok, type DeckError, type Result, type StructuredDeck } from "./typ
  * than throwing. (Reqs 3.1, 3.2)
  */
 export function decode(code: string): Result<StructuredDeck> {
+  const decoded = decodeWithSections(code);
+  return decoded.ok ? ok(decoded.value.deck) : decoded;
+}
+
+/**
+ * A decoded deck code together with the section each card belongs to.
+ */
+export interface DecodedDeck {
+  /** The full deck (all zones pooled), card code -> quantity. */
+  deck: StructuredDeck;
+  /** Card code -> the {@link Section} it was decoded into. */
+  sections: SectionMap;
+}
+
+/**
+ * Decode a Piltover Archive deck code, preserving the zone each card came from.
+ *
+ * The deck-code format distinguishes three zones, which map to canonical
+ * {@link Section}s: the chosen champion ("Chosen Champion"), the main deck
+ * ("Main Deck"), and the sideboard ("Sideboard"). The format does not separate
+ * Legend, Battlefields, or Runes — those cards are part of the main deck zone
+ * and therefore appear under "Main Deck".
+ *
+ * Returns the pooled {@link StructuredDeck} plus a {@link SectionMap}; empty,
+ * malformed, or undecodable codes are caught and returned as an invalid-code
+ * error rather than throwing. (Reqs 3.1, 3.2)
+ */
+export function decodeWithSections(code: string): Result<DecodedDeck> {
   try {
-    const { mainDeck } = getDeckFromCode(code);
+    const { mainDeck, sideboard, chosenChampion } = getDeckFromCode(code);
     const deck: StructuredDeck = new Map();
-    for (const { cardCode, count } of mainDeck) {
-      // Sum in case the library ever emits the same card code more than once.
+    const sections: SectionMap = new Map();
+
+    const add = (cardCode: string, count: number, section: Section) => {
       deck.set(cardCode, (deck.get(cardCode) ?? 0) + count);
+      // First zone seen for a card wins its section label.
+      if (!sections.has(cardCode)) {
+        sections.set(cardCode, section);
+      }
+    };
+
+    if (chosenChampion) {
+      add(chosenChampion, 1, "Chosen Champion");
     }
-    return ok(deck);
+    for (const { cardCode, count } of mainDeck) {
+      add(cardCode, count, "Main Deck");
+    }
+    for (const { cardCode, count } of sideboard) {
+      add(cardCode, count, "Sideboard");
+    }
+
+    return ok({ deck, sections });
   } catch (cause) {
     return err(invalidCodeError(cause));
   }

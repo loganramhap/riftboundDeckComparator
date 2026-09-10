@@ -20,7 +20,7 @@
  * (see {@link SharePayload}). Rather than refactor the shared Comparator to leak
  * its intermediates, this component re-derives the two structured decks from the
  * same raw inputs using the same producers the Comparator uses internally
- * (text → `parse`, code → `deckCode.decode`, link → `linkImporter.import`). This
+ * (text → `parse`, code → `deckCode.decodeWithSections`, link → `linkImporter.import`). This
  * keeps a single source of truth for how each input method maps to a structured
  * deck. Since a comparison only succeeds when both decks produced cleanly, this
  * re-derivation succeeds for exactly the states in which Share is offered.
@@ -38,12 +38,11 @@ import {
   createLink,
   deckCode,
   normalize,
-  normalizedIdentityKey,
-  parseCardCode,
   parseWithSections,
   resolveLink,
   withSections,
   type CompareRequest,
+  type ComparisonResult,
   type ComparisonView as ComparisonViewModel,
   type DeckError,
   type DeckInput,
@@ -53,6 +52,7 @@ import {
   type StructuredDeck,
 } from "@riftbound/shared";
 import { linkImporter } from "./importer.js";
+import { canonicalizeIdentity } from "./cardNames.js";
 import { ComparisonView } from "./components/ComparisonView.js";
 import { DeckInputForm, emptyCompareRequest } from "./components/DeckInputForm.js";
 
@@ -93,8 +93,12 @@ async function deriveStructuredDeck(
       return parsed.ok ? parsed.value : null;
     }
     case "code": {
-      const decoded = deckCode.decode(input.raw);
-      return decoded.ok ? { deck: decoded.value, sections: new Map() } : null;
+      // Preserve the deck-code zones (chosen champion / main deck / sideboard)
+      // as sections.
+      const decoded = deckCode.decodeWithSections(input.raw);
+      return decoded.ok
+        ? { deck: decoded.value.deck, sections: decoded.value.sections }
+        : null;
     }
     case "link": {
       const imported = await linkImporter.import(input.raw);
@@ -112,11 +116,10 @@ async function deriveStructuredDeck(
 }
 
 /**
- * Build a lookup from normalized card identity to {@link Section}, merged from
- * both decks' section maps. Each card key is normalized the same way the
- * comparison engine keys cards (card code -> printing-independent identity;
- * a free-text name -> itself). The first deck's section for an identity wins,
- * then the second deck's; identities with no section fall to the default.
+ * Build a lookup from canonical card identity to {@link Section}, merged from
+ * both decks' section maps. Each card key is collapsed to its canonical
+ * identity (printing-independent, with same-named reprints merged). The first
+ * deck's section for an identity wins, then the second deck's.
  */
 function buildSectionLookup(
   first: SectionMap,
@@ -125,8 +128,7 @@ function buildSectionLookup(
   const lookup = new Map<string, Section>();
   const add = (sections: SectionMap) => {
     for (const [key, section] of sections) {
-      const parsed = parseCardCode(key);
-      const identity = parsed.ok ? normalizedIdentityKey(parsed.value) : key;
+      const identity = canonicalizeIdentity(key);
       if (!lookup.has(identity)) {
         lookup.set(identity, section);
       }
@@ -135,6 +137,38 @@ function buildSectionLookup(
   add(first);
   add(second);
   return lookup;
+}
+
+/**
+ * Collapse a structured deck's keys to canonical identities, summing quantities
+ * for cards that merge (alternate arts / overnumbered reprints of the same
+ * card). The result is keyed by canonical identity and ready for comparison.
+ */
+function canonicalizeDeck(deck: StructuredDeck): StructuredDeck {
+  const out: StructuredDeck = new Map();
+  for (const [key, qty] of deck) {
+    const identity = canonicalizeIdentity(key);
+    out.set(identity, (out.get(identity) ?? 0) + qty);
+  }
+  return out;
+}
+
+/**
+ * Compare two structured decks after collapsing same-named printings to a
+ * single identity, then annotate each entry with its section.
+ */
+function buildResult(
+  first: StructuredDeck,
+  second: StructuredDeck,
+  sectionLookup: Map<string, Section>,
+): ComparisonResult {
+  const firstNorm = normalize(canonicalizeDeck(first));
+  const secondNorm = normalize(canonicalizeDeck(second));
+  // Both inputs are already valid structured decks, so normalization succeeds;
+  // fall back to empty on the impossible error case rather than throwing.
+  const a = firstNorm.ok ? firstNorm.value : new Map<string, number>();
+  const b = secondNorm.ok ? secondNorm.value : new Map<string, number>();
+  return withSections(compareDecks(a, b), sectionLookup);
 }
 
 /**
@@ -151,18 +185,9 @@ function viewFromPayload(payload: SharePayload): {
   ok: false;
   error: DeckError;
 } {
-  const firstNorm = normalize(payload.first);
-  if (!firstNorm.ok) {
-    return {
-      ok: false,
-      error: {
-        code: "INVALID_LINK",
-        message: "The shareable link contains a deck that could not be reconstructed.",
-      },
-    };
-  }
-  const secondNorm = normalize(payload.second);
-  if (!secondNorm.ok) {
+  // Validate that both decks normalize (a corrupt payload must not render a
+  // partial comparison); the actual result is built with canonicalization.
+  if (!normalize(payload.first).ok || !normalize(payload.second).ok) {
     return {
       ok: false,
       error: {
@@ -172,7 +197,9 @@ function viewFromPayload(payload: SharePayload): {
     };
   }
 
-  const result = compareDecks(firstNorm.value, secondNorm.value);
+  // Share payloads carry no section info, so all cards fall to the default
+  // section; same-named printings still collapse via canonicalization.
+  const result = buildResult(payload.first, payload.second, new Map());
   return {
     ok: true,
     active: {
@@ -295,15 +322,24 @@ export function App() {
       second?.sections ?? new Map(),
     );
 
+    // Recompute the comparison from the structured decks with same-named
+    // printings collapsed (the Comparator's own result keys by raw identity and
+    // does not merge reprints). The Comparator is still used above for input
+    // validation, error attribution, and name resolution.
+    const firstDeck = first?.deck ?? new Map();
+    const secondDeck = second?.deck ?? new Map();
+    const result = buildResult(firstDeck, secondDeck, sectionLookup);
+
     setComparison({
       view: {
-        ...outcome.value,
-        result: withSections(outcome.value.result, sectionLookup),
+        firstName: outcome.value.firstName,
+        secondName: outcome.value.secondName,
+        result,
       },
-      // Fall back to empty maps only if re-derivation somehow fails; Share is
-      // gated on both being present, so an empty map simply disables sharing.
-      first: first?.deck ?? new Map(),
-      second: second?.deck ?? new Map(),
+      // Share is gated on both being present, so an empty map simply disables
+      // sharing.
+      first: firstDeck,
+      second: secondDeck,
       firstName: outcome.value.firstName,
       secondName: outcome.value.secondName,
     });

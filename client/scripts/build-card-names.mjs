@@ -24,7 +24,8 @@ const repoRoot = resolve(here, "../..");
 
 const csvPath =
   process.argv[2] ?? resolve(repoRoot, "data/all-card-data.csv");
-const outPath = resolve(here, "../src/card-names.json");
+const namesOutPath = resolve(here, "../src/card-names.json");
+const canonicalOutPath = resolve(here, "../src/canonical-identity.json");
 
 /** Minimal RFC-4180-ish CSV parser (handles quoted fields with commas/newlines). */
 function parseCsv(text) {
@@ -92,8 +93,11 @@ if (idCol < 0 || nameCol < 0) {
   );
 }
 
-const map = {};
-let count = 0;
+// identity -> name (first name seen for an identity wins) and
+// name -> list of identities (to collapse same-named printings, incl.
+// "overnumbered" reprints, to one canonical identity).
+const nameByIdentity = {};
+const identitiesByName = new Map();
 for (let r = 1; r < rows.length; r++) {
   const cols = rows[r];
   const rawId = (cols[idCol] ?? "").trim();
@@ -101,16 +105,49 @@ for (let r = 1; r < rows.length; r++) {
   if (!rawId || !name) continue;
   const identity = toIdentity(rawId);
   if (!identity) continue;
-  // First name seen for an identity wins (printings share a name).
-  if (!(identity in map)) {
-    map[identity] = name;
-    count++;
+  if (!(identity in nameByIdentity)) {
+    nameByIdentity[identity] = name;
+  }
+  let list = identitiesByName.get(name);
+  if (!list) {
+    list = [];
+    identitiesByName.set(name, list);
+  }
+  if (!list.includes(identity)) list.push(identity);
+}
+
+// Choose a canonical identity per name: the lexicographically-smallest identity
+// (deterministic and stable). Every identity that shares a name maps to it, so
+// alternate arts and overnumbered reprints collapse to one card for comparison.
+const canonicalByIdentity = {};
+for (const [, identities] of identitiesByName) {
+  const canonical = [...identities].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[0];
+  for (const identity of identities) {
+    if (identity !== canonical) {
+      canonicalByIdentity[identity] = canonical;
+    }
   }
 }
 
 // Emit sorted keys for stable diffs.
-const sorted = Object.fromEntries(
-  Object.entries(map).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+const sortEntries = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  );
+
+writeFileSync(
+  namesOutPath,
+  JSON.stringify(sortEntries(nameByIdentity), null, 2) + "\n",
+  "utf8",
 );
-writeFileSync(outPath, JSON.stringify(sorted, null, 2) + "\n", "utf8");
-console.log(`Wrote ${count} card names to ${outPath}`);
+writeFileSync(
+  canonicalOutPath,
+  JSON.stringify(sortEntries(canonicalByIdentity), null, 2) + "\n",
+  "utf8",
+);
+console.log(
+  `Wrote ${Object.keys(nameByIdentity).length} card names to ${namesOutPath}`,
+);
+console.log(
+  `Wrote ${Object.keys(canonicalByIdentity).length} identity aliases to ${canonicalOutPath}`,
+);

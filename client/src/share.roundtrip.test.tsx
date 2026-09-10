@@ -105,6 +105,8 @@ describe("share round trip through the app (Req 9.3)", () => {
     //  - OGN-007a (first, qty 3) and OGN-007 (second, qty 2) normalize to the
     //    same identity OGN-007 -> a Card Difference (3 vs 2).
     //  - VEN-SP1 present only in the first deck -> a Card Difference (1 vs 0).
+    //    VEN-SP1 is a reprint of OGN-039 ("Kai'Sa, Survivor"), so it collapses
+    //    to the canonical identity OGN-039 in the rendered rows.
     //  - RAD-R05 present only in the second deck -> a Card Difference (0 vs 1).
     const firstDeckList = "3 OGN-007a\n1 VEN-SP1";
     const secondDeckList = "2 OGN-007\n1 RAD-R05";
@@ -132,7 +134,8 @@ describe("share round trip through the app (Req 9.3)", () => {
       second: "2",
       kind: "difference",
     });
-    expect(byIdentity.get("VEN-SP1")).toMatchObject({
+    // VEN-SP1 collapses to its canonical identity OGN-039.
+    expect(byIdentity.get("OGN-039")).toMatchObject({
       first: "1",
       second: "0",
       kind: "difference",
